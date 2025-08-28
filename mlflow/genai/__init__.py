@@ -1,4 +1,5 @@
 from mlflow.genai import (
+    datasets,
     judges,
     scorers,
 )
@@ -8,6 +9,7 @@ from mlflow.genai.datasets import (
     get_dataset,
 )
 from mlflow.genai.evaluation import evaluate, to_predict_fn
+from mlflow.genai.git_versioning import disable_git_model_versioning, enable_git_model_versioning
 from mlflow.genai.labeling import (
     Agent,
     LabelingSession,
@@ -28,16 +30,11 @@ from mlflow.genai.prompts import (
 )
 from mlflow.genai.scheduled_scorers import (
     ScorerScheduleConfig,
-    add_scheduled_scorer,
-    delete_scheduled_scorer,
-    get_scheduled_scorer,
-    list_scheduled_scorers,
-    set_scheduled_scorers,
-    update_scheduled_scorer,
 )
 from mlflow.genai.scorers import Scorer, scorer
 
 __all__ = [
+    "datasets",
     "evaluate",
     "to_predict_fn",
     "Scorer",
@@ -54,12 +51,6 @@ __all__ = [
     "set_prompt_alias",
     "optimize_prompt",
     "ScorerScheduleConfig",
-    "add_scheduled_scorer",
-    "update_scheduled_scorer",
-    "delete_scheduled_scorer",
-    "get_scheduled_scorer",
-    "list_scheduled_scorers",
-    "set_scheduled_scorers",
     "Agent",
     "LabelingSession",
     "ReviewApp",
@@ -68,4 +59,7 @@ __all__ = [
     "get_labeling_sessions",
     "get_labeling_session",
     "delete_labeling_session",
+    # git model versioning
+    "disable_git_model_versioning",
+    "enable_git_model_versioning",
 ]

@@ -17,12 +17,8 @@ if Version(openai.__version__) < Version("1.66.00"):
 
 @pytest.fixture(params=[True, False], ids=["sync", "async"])
 def client(request, monkeypatch, mock_openai):
-    monkeypatch.setenvs(
-        {
-            "OPENAI_API_KEY": "test",
-            "OPENAI_API_BASE": mock_openai,
-        }
-    )
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setenv("OPENAI_API_BASE", mock_openai)
     if request.param:
         client = openai.OpenAI(api_key="test", base_url=mock_openai)
         client._is_async = False
@@ -253,7 +249,7 @@ async def test_responses_function_calling_autolog(client):
     assert span.attributes[SpanAttributeKey.CHAT_TOOLS] == [
         {"type": "function", "function": {k: v for k, v in tools[0].items() if k != "type"}}
     ]
-    assert span.attributes[SpanAttributeKey.MESSAGE_FORMAT] == "openai.responses"
+    assert span.attributes[SpanAttributeKey.MESSAGE_FORMAT] == "openai"
 
 
 @pytest.mark.asyncio

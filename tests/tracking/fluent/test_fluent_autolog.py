@@ -118,6 +118,9 @@ def reset_global_states():
     mlflow.utils.import_hooks._post_import_hooks.pop("pydantic_ai", None)
     mlflow.utils.import_hooks._post_import_hooks.pop("crewai", None)
     mlflow.utils.import_hooks._post_import_hooks.pop("autogen_agentchat", None)
+    mlflow.utils.import_hooks._post_import_hooks.pop("semantic_kernel", None)
+    mlflow.utils.import_hooks._post_import_hooks.pop("agno", None)
+    mlflow.utils.import_hooks._post_import_hooks.pop("strands", None)
     # TODO: Remove this line when we stop supporting google.generativeai
     mlflow.utils.import_hooks._post_import_hooks.pop("google.generativeai", None)
 
@@ -413,12 +416,8 @@ def test_autolog_excluded_flavors(library, mlflow_module):
 @pytest.fixture
 def mock_openai(monkeypatch):
     with start_mock_openai_server() as base_url:
-        monkeypatch.setenvs(
-            {
-                "OPENAI_API_KEY": "test",
-                "OPENAI_API_BASE": base_url,
-            }
-        )
+        monkeypatch.setenv("OPENAI_API_KEY", "test")
+        monkeypatch.setenv("OPENAI_API_BASE", base_url)
         yield base_url
 
 
@@ -483,7 +482,7 @@ def test_autolog_genai_import(disable, flavor_and_module):
 
     # pytorch-lightning is not valid flavor name.
     # paddle autologging is not in the list of autologging integrations.
-    # crewai and smolagents require Python 3.10+ (our CI runs on Python 3.9).
+    # crewai, smolagents, and semantic_kernel require Python 3.10+ (our CI runs on Python 3.9).
     if flavor in {
         "pytorch-lightning",
         "paddle",
@@ -491,6 +490,9 @@ def test_autolog_genai_import(disable, flavor_and_module):
         "smolagents",
         "pydantic_ai",
         "autogen",
+        "semantic_kernel",
+        "agno",
+        "strands",
     }:
         return
 
