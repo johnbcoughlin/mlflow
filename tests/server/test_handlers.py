@@ -126,7 +126,7 @@ from mlflow.store.model_registry import (
     SEARCH_REGISTERED_MODEL_MAX_RESULTS_DEFAULT,
 )
 from mlflow.store.model_registry.rest_store import RestStore as ModelRegistryRestStore
-from mlflow.store.tracking.rest_store import RestStore
+from mlflow.store.tracking.databricks_rest_store import DatabricksTracingRestStore
 from mlflow.tracing.analysis import TraceFilterCorrelationResult
 from mlflow.utils.mlflow_tags import MLFLOW_ARTIFACT_LOCATION
 from mlflow.utils.proto_json_utils import message_to_json
@@ -1173,7 +1173,6 @@ def test_upsert_dataset_records(mock_tracking_store):
     mock_tracking_store.upsert_dataset_records.assert_called_once_with(
         dataset_id=dataset_id,
         records=records,
-        updated_by=None,
     )
 
     response_data = json.loads(resp.get_data())
@@ -1372,18 +1371,31 @@ def test_register_scorer(mock_get_request_message, mock_tracking_store):
         experiment_id=experiment_id, name=name, serialized_scorer=serialized_scorer
     )
 
-    mock_tracking_store.register_scorer.return_value = 1
+    mock_scorer_version = ScorerVersion(
+        experiment_id=experiment_id,
+        scorer_name=name,
+        scorer_version=1,
+        serialized_scorer=serialized_scorer,
+        creation_time=1234567890,
+        scorer_id="test-scorer-id",
+    )
+    mock_tracking_store.register_scorer.return_value = mock_scorer_version
 
     resp = _register_scorer()
 
-    # Verify the tracking store was called with correct arguments
     mock_tracking_store.register_scorer.assert_called_once_with(
         experiment_id, name, serialized_scorer
     )
 
-    # Verify the response
     response_data = json.loads(resp.get_data())
-    assert response_data == {"version": 1}
+    assert response_data == {
+        "version": 1,
+        "scorer_id": "test-scorer-id",
+        "experiment_id": experiment_id,
+        "name": name,
+        "serialized_scorer": serialized_scorer,
+        "creation_time": 1234567890,
+    }
 
 
 def test_list_scorers(mock_get_request_message, mock_tracking_store):
@@ -1705,7 +1717,7 @@ def test_databricks_tracking_store_registration():
 
     # Test that the correct store type is returned for databricks scheme
     store = registry.get_store("databricks", artifact_uri=None)
-    assert isinstance(store, RestStore)
+    assert isinstance(store, DatabricksTracingRestStore)
 
     # Verify that the store was created with the right get_host_creds function
     # The RestStore should have a get_host_creds attribute that is a partial function

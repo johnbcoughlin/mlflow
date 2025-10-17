@@ -15,10 +15,6 @@ class Event:
         return None
 
 
-class ImportMlflowEvent(Event):
-    name: str = "import_mlflow"
-
-
 class CreateExperimentEvent(Event):
     name: str = "create_experiment"
 
@@ -44,6 +40,19 @@ class StartTraceEvent(Event):
 
 class LogAssessmentEvent(Event):
     name: str = "log_assessment"
+
+    @classmethod
+    def parse(cls, arguments: dict[str, Any]) -> dict[str, Any] | None:
+        from mlflow.entities.assessment import Expectation, Feedback
+
+        assessment = arguments.get("assessment")
+        if assessment is None:
+            return None
+
+        if isinstance(assessment, Expectation):
+            return {"type": "expectation", "source_type": assessment.source.source_type}
+        elif isinstance(assessment, Feedback):
+            return {"type": "feedback", "source_type": assessment.source.source_type}
 
 
 class EvaluateEvent(Event):
@@ -74,6 +83,12 @@ class CreateLoggedModelEvent(Event):
 
 class GetLoggedModelEvent(Event):
     name: str = "get_logged_model"
+
+    @classmethod
+    def parse(cls, arguments: dict[str, Any]) -> dict[str, Any] | None:
+        return {
+            "imports": [pkg for pkg in MODULES_TO_CHECK_IMPORT if pkg in sys.modules],
+        }
 
 
 class CreateRegisteredModelEvent(Event):
@@ -169,6 +184,35 @@ class CreateWebhookEvent(Event):
 class PromptOptimizationEvent(Event):
     name: str = "prompt_optimization"
 
+    @classmethod
+    def parse(cls, arguments: dict[str, Any]) -> dict[str, Any] | None:
+        result = {}
+
+        # Track the optimizer type used
+        if optimizer := arguments.get("optimizer"):
+            result["optimizer_type"] = type(optimizer).__name__
+        else:
+            result["optimizer_type"] = None
+
+        # Track the number of prompts being optimized
+        prompt_uris = arguments.get("prompt_uris") or []
+        try:
+            result["prompt_count"] = len(prompt_uris)
+        except TypeError:
+            result["prompt_count"] = None
+
+        # Track if custom scorers are provided and how many
+        scorers = arguments.get("scorers")
+        try:
+            result["scorer_count"] = len(scorers)
+        except TypeError:
+            result["scorer_count"] = None
+
+        # Track if custom aggregation is provided
+        result["custom_aggregation"] = arguments.get("aggregation") is not None
+
+        return result
+
 
 class LogDatasetEvent(Event):
     name: str = "log_dataset"
@@ -224,3 +268,40 @@ class InvokeCustomJudgeModelEvent(Event):
 
         model_provider, _ = _parse_model_uri(model_uri)
         return {"model_provider": model_provider}
+
+
+class MakeJudgeEvent(Event):
+    name: str = "make_judge"
+
+    @classmethod
+    def parse(cls, arguments: dict[str, Any]) -> dict[str, Any] | None:
+        model = arguments.get("model")
+        if model and isinstance(model, str):
+            model_provider = model.split(":")[0] if ":" in model else None
+            return {"model_provider": model_provider}
+        return {"model_provider": None}
+
+
+class AlignJudgeEvent(Event):
+    name: str = "align_judge"
+
+    @classmethod
+    def parse(cls, arguments: dict[str, Any]) -> dict[str, Any] | None:
+        result = {}
+
+        if (traces := arguments.get("traces")) is not None:
+            try:
+                result["trace_count"] = len(traces)
+            except TypeError:
+                result["trace_count"] = None
+
+        if optimizer := arguments.get("optimizer"):
+            result["optimizer_type"] = type(optimizer).__name__
+        else:
+            result["optimizer_type"] = "default"
+
+        return result
+
+
+class AutologgingEvent(Event):
+    name: str = "autologging"

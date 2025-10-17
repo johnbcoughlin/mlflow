@@ -33,6 +33,7 @@ const config: Config = {
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'throw',
   onBrokenAnchors: 'throw',
+  onDuplicateRoutes: 'throw', // Fail build on duplicate redirects
 
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you
@@ -120,6 +121,13 @@ const config: Config = {
           to: `${apiReferencePrefix()}api_reference/index.html`,
           position: 'left',
           label: 'API Reference',
+        },
+        {
+          type: 'docSidebar',
+          position: 'left',
+          sidebarId: 'selfHostingSidebar',
+          label: 'Self-Hosting',
+          docsPluginId: 'self-hosting',
         },
         {
           type: 'docSidebar',
@@ -249,6 +257,16 @@ const config: Config = {
         sidebarPath: './communitySidebar.ts',
       },
     ],
+    // Self Hosting docs plugin
+    [
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'self-hosting',
+        path: 'docs/self-hosting',
+        routeBasePath: 'self-hosting',
+        sidebarPath: './sidebarsSelfHosting.ts',
+      },
+    ],
     [
       '@docusaurus/plugin-client-redirects',
       {
@@ -256,6 +274,23 @@ const config: Config = {
           {
             to: '/',
             from: ['/new-features'],
+          },
+          // Redirect to the new self-hosting guide
+          {
+            to: '/self-hosting/architecture/tracking-server',
+            from: ['/ml/tracking/server', '/tracking/server'],
+          },
+          {
+            to: '/self-hosting/architecture/artifact-store',
+            from: ['/ml/tracking/artifact-stores', '/tracking/artifact-stores'],
+          },
+          {
+            to: '/self-hosting/architecture/backend-store',
+            from: ['/ml/tracking/backend-stores', '/tracking/backend-stores'],
+          },
+          {
+            to: '/self-hosting/security/basic-http-auth',
+            from: ['/ml/auth'],
           },
           // Redirect mlflow 3 pages
           {
@@ -568,7 +603,17 @@ const config: Config = {
               '/llms/llm-evaluate/notebooks/rag-evaluation-llama2',
             ],
           },
-
+          {
+            to: '/genai/eval-monitor/scorers/llm-judge/agentic-overview',
+            from: [
+              '/genai/eval-monitor/scorers/llm-judge/trace-analysis',
+              '/genai/eval-monitor/scorers/llm-judge/agent-behavior-patterns',
+            ],
+          },
+          {
+            to: '/genai/datasets',
+            from: ['/genai/eval-monitor/scorers/llm-judge/dataset'],
+          },
           // Prompt Management Redirects
           {
             to: '/genai/prompt-registry/prompt-engineering',
@@ -654,47 +699,13 @@ const config: Config = {
             from: ['/llms/deployments/uc_integration'],
           },
 
-          // Data Model Redirects (removed pages redirect to main GenAI landing)
-          {
-            to: '/genai',
-            from: ['/genai/data-model', '/genai/data-model/index'],
-          },
-          {
-            to: '/genai',
-            from: ['/genai/data-model/experiments'],
-          },
-          {
-            to: '/genai',
-            from: ['/genai/data-model/logged-model'],
-          },
-          {
-            to: '/genai',
-            from: ['/genai/data-model/runs'],
-          },
-          {
-            to: '/genai',
-            from: ['/genai/data-model/traces'],
-          },
-          {
-            to: '/genai',
-            from: ['/genai/data-model/prompts'],
-          },
-          {
-            to: '/genai',
-            from: ['/genai/data-model/app-versions'],
-          },
-          {
-            to: '/genai',
-            from: ['/genai/data-model/model-registry'],
-          },
-
           // Traditional ML and Core MLflow Redirects
           {
             to: '/ml',
             from: ['/introduction'],
           },
           {
-            to: '/ml/auth',
+            to: '/self-hosting/security/basic-http-auth',
             from: ['/auth'],
           },
           {
@@ -968,16 +979,8 @@ const config: Config = {
             from: ['/tracking'],
           },
           {
-            to: '/ml/tracking/artifact-stores',
-            from: ['/tracking/artifacts-stores'],
-          },
-          {
             to: '/ml/tracking/autolog',
             from: ['/tracking/autolog'],
-          },
-          {
-            to: '/ml/tracking/backend-stores',
-            from: ['/tracking/backend-stores'],
           },
           {
             to: '/ml/tracking/quickstart',
@@ -990,10 +993,6 @@ const config: Config = {
           {
             to: '/ml/tracking/quickstart/notebooks/tracking_quickstart',
             from: ['/getting-started/intro-quickstart/notebooks/tracking_quickstart'],
-          },
-          {
-            to: '/ml/tracking/server',
-            from: ['/tracking/server'],
           },
           {
             to: '/ml/tracking/system-metrics',

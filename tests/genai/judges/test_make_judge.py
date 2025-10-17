@@ -26,7 +26,7 @@ from mlflow.exceptions import MlflowException
 from mlflow.genai import make_judge
 from mlflow.genai.judges.instructions_judge import InstructionsJudge
 from mlflow.genai.judges.instructions_judge.constants import JUDGE_BASE_PROMPT
-from mlflow.genai.judges.utils import _LITELLM_PROVIDERS, _NATIVE_PROVIDERS, validate_judge_model
+from mlflow.genai.judges.utils import _NATIVE_PROVIDERS, validate_judge_model
 from mlflow.genai.scorers.base import Scorer, ScorerKind, SerializedScorer
 from mlflow.genai.scorers.registry import _get_scorer_store
 from mlflow.tracing.utils import build_otel_context
@@ -85,6 +85,17 @@ def mock_databricks_rag_eval(monkeypatch):
 
     mock_rag_eval.context = mock_context_module
     monkeypatch.setitem(sys.modules, "databricks.rag_eval.context", mock_context_module)
+
+    # Mock env_vars module needed by call_chat_completions
+    mock_env_vars_module = types.ModuleType("databricks.rag_eval.env_vars")
+
+    class MockEnvVar:
+        def set(self, value):
+            pass
+
+    mock_env_vars_module.RAG_EVAL_EVAL_SESSION_CLIENT_NAME = MockEnvVar()
+    mock_rag_eval.env_vars = mock_env_vars_module
+    monkeypatch.setitem(sys.modules, "databricks.rag_eval.env_vars", mock_env_vars_module)
 
     return mock_context_module
 
@@ -246,7 +257,7 @@ def test_databricks_model_requires_databricks_agents(monkeypatch):
         )
 
 
-@pytest.mark.parametrize("provider", _LITELLM_PROVIDERS)
+@pytest.mark.parametrize("provider", {"vertexai", "cohere", "replicate", "groq", "together"})
 def test_litellm_provider_requires_litellm(monkeypatch, provider):
     monkeypatch.setitem(sys.modules, "litellm", None)
 
@@ -897,9 +908,9 @@ def test_judge_registration_as_scorer(mock_invoke_judge_model):
 
     store = _get_scorer_store()
     version = store.register_scorer(experiment, judge)
-    assert version == 1
+    assert version.scorer_version == 1
 
-    retrieved_scorer = store.get_scorer(experiment, "test_judge", version)
+    retrieved_scorer = store.get_scorer(experiment, "test_judge", version.scorer_version)
     assert retrieved_scorer is not None
     assert isinstance(retrieved_scorer, InstructionsJudge)
     assert retrieved_scorer.name == "test_judge"
@@ -962,7 +973,7 @@ def test_judge_registration_as_scorer(mock_invoke_judge_model):
         model="openai:/gpt-4o",
     )
     version2 = store.register_scorer(experiment, judge_v2)
-    assert version2 == 2
+    assert version2.scorer_version == 2
 
     versions = store.list_scorer_versions(experiment, "test_judge")
     assert len(versions) == 2
@@ -1002,9 +1013,9 @@ def test_judge_registration_with_reserved_variables(mock_invoke_judge_model):
 
     store = _get_scorer_store()
     version = store.register_scorer(experiment, judge)
-    assert version == 1
+    assert version.scorer_version == 1
 
-    retrieved_judge = store.get_scorer(experiment, "reserved_judge", version)
+    retrieved_judge = store.get_scorer(experiment, "reserved_judge", version.scorer_version)
     assert isinstance(retrieved_judge, InstructionsJudge)
     assert retrieved_judge.instructions == instructions_with_reserved
     assert retrieved_judge.template_variables == {"inputs", "outputs", "expectations"}
@@ -1590,15 +1601,18 @@ def test_unused_parameters_warning(
     with patch("mlflow.genai.judges.instructions_judge._logger") as mock_logger:
         judge(**provided_params)
 
-        assert mock_logger.warning.called
+        if "{{ trace }}" in instructions:
+            assert not mock_logger.warning.called
+        else:
+            assert mock_logger.warning.called
 
-        warning_call_args = mock_logger.warning.call_args
-        assert warning_call_args is not None
+            warning_call_args = mock_logger.warning.call_args
+            assert warning_call_args is not None
 
-        warning_msg = warning_call_args[0][0]
+            warning_msg = warning_call_args[0][0]
 
-        assert "parameters were provided but are not used" in warning_msg
-        assert expected_warning in warning_msg
+            assert "parameters were provided but are not used" in warning_msg
+            assert expected_warning in warning_msg
 
 
 def test_context_labels_added_to_interpolated_values(mock_invoke_judge_model):
@@ -2291,7 +2305,9 @@ def test_trace_only_template_uses_two_messages_with_empty_user(mock_invoke_judge
 
     user_msg = prompt[1]
     assert user_msg.role == "user"
-    assert user_msg.content == ""  # Empty user message for trace-only
+    assert (
+        user_msg.content == "Follow the instructions from the first message"
+    )  # Placeholder user message for trace-only
 
 
 def test_no_warning_when_extracting_fields_from_trace(mock_invoke_judge_model):
@@ -2327,12 +2343,109 @@ def test_warning_shown_for_explicitly_provided_unused_fields(mock_invoke_judge_m
         model="openai:/gpt-4",
     )
 
-    # Explicitly provide outputs which isn't used in template
     with mock.patch("mlflow.genai.judges.instructions_judge._logger.warning") as mock_warning:
         judge(inputs="What is AI?", outputs="This output is not used by the template")
 
-        # Should warn about outputs being unused
         mock_warning.assert_called_once()
         warning_message = mock_warning.call_args[0][0]
         assert "outputs" in warning_message
         assert "not used by this judge" in warning_message
+
+
+def test_no_warning_for_trace_based_judge_with_extra_fields(mock_invoke_judge_model):
+    judge = make_judge(
+        name="test_judge",
+        instructions="Evaluate {{ trace }} for quality",
+        model="openai:/gpt-4",
+    )
+
+    span_mock = Span(
+        OTelReadableSpan(
+            name="test_span",
+            context=build_otel_context(
+                trace_id=12345678,
+                span_id=12345678,
+            ),
+        )
+    )
+    trace = Trace(
+        info=TraceInfo(
+            trace_id="test_trace",
+            trace_location=TraceLocation.from_experiment_id("0"),
+            request_time=1234567890,
+            execution_duration=100,
+            state=TraceState.OK,
+            trace_metadata={},
+            tags={},
+        ),
+        data=TraceData(spans=[span_mock]),
+    )
+
+    with mock.patch("mlflow.genai.judges.instructions_judge._logger.warning") as mock_warning:
+        judge(
+            trace=trace,
+            inputs="These inputs are extracted from trace",
+            outputs="These outputs are extracted from trace",
+            expectations={"ground_truth": "These expectations are extracted from trace"},
+        )
+
+        mock_warning.assert_not_called()
+
+
+def test_no_duplicate_output_fields_in_system_message():
+    field_judge = make_judge(
+        name="field_judge",
+        instructions="Evaluate {{ inputs }} and {{ outputs }} for quality",
+        model="openai:/gpt-4",
+    )
+
+    field_system_msg = field_judge._build_system_message(is_trace_based=False)
+
+    assert field_system_msg.count('"result"') == 1
+    assert field_system_msg.count('"rationale"') == 1
+
+    assert (
+        field_system_msg.count("Please provide your assessment in the following JSON format") == 1
+    )
+
+    trace_judge = make_judge(
+        name="trace_judge",
+        instructions="Evaluate {{ trace }} for quality",
+        model="openai:/gpt-4",
+    )
+
+    trace_system_msg = trace_judge._build_system_message(is_trace_based=True)
+
+    assert trace_system_msg.count("- result:") == 1
+    assert trace_system_msg.count("- rationale:") == 1
+
+    assert "Please provide your assessment in the following JSON format" not in trace_system_msg
+
+
+def test_instructions_judge_repr():
+    # Test short instructions that fit within display limit
+    short_instructions = "Check {{ outputs }}"
+    judge = make_judge(name="test_judge", instructions=short_instructions, model="openai:/gpt-4")
+
+    repr_str = repr(judge)
+    assert "InstructionsJudge" in repr_str
+    assert "name='test_judge'" in repr_str
+    assert "model='openai:/gpt-4'" in repr_str
+    assert f"instructions='{short_instructions}'" in repr_str
+    assert "template_variables=['outputs']" in repr_str
+
+    # Test long instructions that exceed PROMPT_TEXT_DISPLAY_LIMIT (30 chars)
+    long_instructions = (
+        "This is a very long instruction that will be truncated {{ inputs }} and {{ outputs }}"
+    )
+    judge_long = make_judge(
+        name="long_judge", instructions=long_instructions, model="openai:/gpt-4"
+    )
+
+    repr_long = repr(judge_long)
+    assert "InstructionsJudge" in repr_long
+    assert "name='long_judge'" in repr_long
+    assert "model='openai:/gpt-4'" in repr_long
+    # Should show first 30 characters + "..."
+    assert "instructions='This is a very long instructio..." in repr_long
+    assert "template_variables=['inputs', 'outputs']" in repr_long

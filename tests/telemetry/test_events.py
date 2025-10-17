@@ -1,7 +1,10 @@
+from unittest.mock import Mock
+
 import pytest
 
 from mlflow.prompt.constants import IS_PROMPT_TAG_KEY
 from mlflow.telemetry.events import (
+    AlignJudgeEvent,
     CreateDatasetEvent,
     CreateExperimentEvent,
     CreateLoggedModelEvent,
@@ -11,7 +14,9 @@ from mlflow.telemetry.events import (
     CreateRunEvent,
     EvaluateEvent,
     LogAssessmentEvent,
+    MakeJudgeEvent,
     MergeRecordsEvent,
+    PromptOptimizationEvent,
     StartTraceEvent,
 )
 
@@ -83,6 +88,9 @@ def test_event_name():
     assert EvaluateEvent.name == "evaluate"
     assert CreateDatasetEvent.name == "create_dataset"
     assert MergeRecordsEvent.name == "merge_records"
+    assert MakeJudgeEvent.name == "make_judge"
+    assert AlignJudgeEvent.name == "align_judge"
+    assert PromptOptimizationEvent.name == "prompt_optimization"
 
 
 @pytest.mark.parametrize(
@@ -99,3 +107,103 @@ def test_event_name():
 )
 def test_merge_records_parse_params(arguments, expected_params):
     assert MergeRecordsEvent.parse(arguments) == expected_params
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected_params"),
+    [
+        ({"model": "openai:/gpt-4"}, {"model_provider": "openai"}),
+        ({"model": "databricks:/dbrx"}, {"model_provider": "databricks"}),
+        ({"model": "custom"}, {"model_provider": None}),
+        ({"model": None}, {"model_provider": None}),
+        ({}, {"model_provider": None}),
+    ],
+)
+def test_make_judge_parse_params(arguments, expected_params):
+    assert MakeJudgeEvent.parse(arguments) == expected_params
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected_params"),
+    [
+        ({"traces": [{}, {}], "optimizer": None}, {"trace_count": 2, "optimizer_type": "default"}),
+        (
+            {"traces": [{}], "optimizer": type("MockOptimizer", (), {})()},
+            {"trace_count": 1, "optimizer_type": "MockOptimizer"},
+        ),
+        ({"traces": [], "optimizer": None}, {"trace_count": 0, "optimizer_type": "default"}),
+        ({"traces": None, "optimizer": None}, {"optimizer_type": "default"}),
+        ({}, {"optimizer_type": "default"}),
+    ],
+)
+def test_align_judge_parse_params(arguments, expected_params):
+    assert AlignJudgeEvent.parse(arguments) == expected_params
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected_params"),
+    [
+        # Normal case with optimizer and prompt URIs
+        (
+            {
+                "optimizer": type("MockOptimizer", (), {})(),
+                "prompt_uris": ["prompts:/test/1"],
+                "scorers": None,
+                "aggregation": None,
+            },
+            {
+                "optimizer_type": "MockOptimizer",
+                "prompt_count": 1,
+                "scorer_count": None,
+                "custom_aggregation": False,
+            },
+        ),
+        # Multiple prompt URIs with custom scorers
+        (
+            {
+                "optimizer": type("CustomAdapter", (), {})(),
+                "prompt_uris": ["prompts:/test/1", "prompts:/test/2"],
+                "scorers": [Mock()],
+                "aggregation": None,
+            },
+            {
+                "optimizer_type": "CustomAdapter",
+                "prompt_count": 2,
+                "scorer_count": 1,
+                "custom_aggregation": False,
+            },
+        ),
+        # Custom objective with multiple scorers
+        (
+            {
+                "optimizer": type("TestAdapter", (), {})(),
+                "prompt_uris": ["prompts:/test/1"],
+                "scorers": [Mock(), Mock(), Mock()],
+                "aggregation": lambda scores: sum(scores.values()),
+            },
+            {
+                "optimizer_type": "TestAdapter",
+                "prompt_count": 1,
+                "scorer_count": 3,
+                "custom_aggregation": True,
+            },
+        ),
+        # No optimizer provided - optimizer_type should be None
+        (
+            {
+                "optimizer": None,
+                "prompt_uris": ["prompts:/test/1"],
+                "scorers": None,
+                "aggregation": None,
+            },
+            {
+                "optimizer_type": None,
+                "prompt_count": 1,
+                "scorer_count": None,
+                "custom_aggregation": False,
+            },
+        ),
+    ],
+)
+def test_prompt_optimization_parse_params(arguments, expected_params):
+    assert PromptOptimizationEvent.parse(arguments) == expected_params

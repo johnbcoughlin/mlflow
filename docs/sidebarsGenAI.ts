@@ -36,49 +36,18 @@ const sidebarsGenAI: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: 'Concepts',
-      className: 'sidebar-top-level-category',
-      items: [
-        {
-          type: 'doc',
-          id: 'concepts/trace',
-          label: 'Trace',
-        },
-        {
-          type: 'doc',
-          id: 'concepts/span',
-          label: 'Span',
-        },
-        {
-          type: 'doc',
-          id: 'concepts/feedback',
-          label: 'Feedback',
-        },
-        {
-          type: 'doc',
-          id: 'concepts/expectations',
-          label: 'Expectations',
-        },
-        {
-          type: 'doc',
-          id: 'concepts/evaluation-datasets',
-          label: 'Evaluation Datasets',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Getting Started',
       className: 'sidebar-top-level-category',
       items: [
         {
           type: 'doc',
-          id: 'getting-started/databricks-trial/index',
+          id: 'getting-started/connect-environment',
+          label: 'Set Up MLflow',
         },
         {
-          type: 'doc',
-          id: 'getting-started/connect-environment',
-          label: 'Connect to MLflow',
+          type: 'link',
+          href: '/genai/tracing/quickstart/python-openai',
+          label: 'Tracing GenAI Apps',
         },
         {
           type: 'doc',
@@ -86,9 +55,8 @@ const sidebarsGenAI: SidebarsConfig = {
           label: 'Evaluate LLMs and Agents',
         },
         {
-          type: 'link',
-          href: '/genai/tracing/quickstart/python-openai',
-          label: 'Tracing GenAI Apps',
+          type: 'doc',
+          id: 'getting-started/databricks-trial/index',
         },
       ],
       link: {
@@ -239,40 +207,9 @@ const sidebarsGenAI: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: 'MCP',
-      className: 'sidebar-top-level-category',
-      items: [
-        {
-          type: 'doc',
-          id: 'mcp/index',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Evaluate & Monitor',
       className: 'sidebar-top-level-category',
       items: [
-        {
-          type: 'category',
-          label: 'Evaluation Datasets',
-          items: [
-            {
-              type: 'doc',
-              id: 'datasets/end-to-end-workflow',
-              label: 'End-to-End Workflow',
-            },
-            {
-              type: 'doc',
-              id: 'datasets/sdk-guide',
-              label: 'SDK Guide',
-            },
-          ],
-          link: {
-            type: 'doc',
-            id: 'datasets/index',
-          },
-        },
         {
           type: 'doc',
           id: 'eval-monitor/quickstart',
@@ -298,7 +235,6 @@ const sidebarsGenAI: SidebarsConfig = {
               label: 'Evaluate Traces',
             },
           ],
-          collapsed: false,
         },
         {
           type: 'category',
@@ -311,47 +247,115 @@ const sidebarsGenAI: SidebarsConfig = {
             },
             {
               type: 'category',
-              label: 'LLM-based Scorers',
+              label: 'Supported Scorers',
               items: [
                 {
                   type: 'doc',
                   id: 'eval-monitor/scorers/llm-judge/predefined',
+                  label: 'Predefined Scorers',
+                },
+                {
+                  type: 'category',
+                  label: 'LLM-as-a-Judge',
+                  items: [
+                    {
+                      type: 'doc',
+                      id: 'eval-monitor/scorers/llm-judge/index',
+                      label: 'Overview',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'eval-monitor/scorers/llm-judge/make-judge',
+                      label: 'Template-based',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'eval-monitor/scorers/llm-judge/guidelines',
+                      label: 'Guidelines-based',
+                    },
+                  ],
+                  collapsed: false,
                 },
                 {
                   type: 'doc',
-                  id: 'eval-monitor/scorers/llm-judge/guidelines',
+                  id: 'eval-monitor/scorers/llm-judge/agentic-overview',
+                  label: 'Agent-as-a-Judge',
                 },
                 {
                   type: 'doc',
-                  id: 'eval-monitor/scorers/llm-judge/prompt',
+                  id: 'eval-monitor/scorers/custom',
+                  label: 'Code-based Scorers',
                 },
               ],
-              link: {
-                type: 'doc',
-                id: 'eval-monitor/scorers/llm-judge/index',
-              },
             },
             {
               type: 'doc',
-              id: 'eval-monitor/scorers/custom',
-              label: 'Code-based Scorers',
+              id: 'eval-monitor/scorers/llm-judge/alignment',
+              label: 'Align with Human Feedback',
+            },
+            {
+              type: 'doc',
+              id: 'eval-monitor/scorers/versioning',
+              label: 'Versioning Scorers',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Evaluation Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'datasets/end-to-end-workflow',
+              label: 'End-to-End Workflow',
+            },
+            {
+              type: 'doc',
+              id: 'datasets/sdk-guide',
+              label: 'SDK Guide',
+            },
+          ],
+          link: {
+            type: 'doc',
+            id: 'datasets/index',
+          },
+        },
+        {
+          type: 'category',
+          label: 'Annotation',
+          items: [
+            {
+              type: 'doc',
+              id: 'assessments/feedback',
+              label: 'Human Feedback',
+            },
+            {
+              type: 'doc',
+              id: 'assessments/expectations',
+              label: 'Annotating Ground Truth',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'AI Insights',
+          items: [
+            {
+              type: 'doc',
+              id: 'eval-monitor/ai-insights/ai-issue-discovery',
+              label: 'AI Issue Discovery',
             },
           ],
         },
         {
           type: 'doc',
-          id: 'assessments/feedback',
-          label: 'Human Feedback',
-        },
-        {
-          type: 'doc',
-          id: 'assessments/expectations',
-          label: 'Annotating Ground Truth',
-        },
-        {
-          type: 'doc',
           id: 'eval-monitor/legacy-llm-evaluation',
           label: 'LLM Evaluation (Legacy)',
+        },
+        {
+          type: 'doc',
+          id: 'eval-monitor/faq',
+          label: 'FAQ',
         },
       ],
       link: {
@@ -361,7 +365,7 @@ const sidebarsGenAI: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: 'Prompt Registry',
+      label: 'Prompt Management',
       className: 'sidebar-top-level-category',
       items: [
         {
@@ -391,6 +395,10 @@ const sidebarsGenAI: SidebarsConfig = {
         {
           type: 'doc',
           id: 'prompt-registry/optimize-prompts',
+        },
+        {
+          type: 'doc',
+          id: 'prompt-registry/rewrite-prompts',
         },
         {
           type: 'doc',
@@ -600,6 +608,17 @@ const sidebarsGenAI: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'MCP',
+      className: 'sidebar-top-level-category',
+      items: [
+        {
+          type: 'doc',
+          id: 'mcp/index',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Model Serving',
       className: 'sidebar-top-level-category',
       items: [
@@ -684,6 +703,43 @@ const sidebarsGenAI: SidebarsConfig = {
         type: 'doc',
         id: 'governance/ai-gateway/index',
       },
+    },
+    {
+      type: 'category',
+      label: 'Concepts',
+      className: 'sidebar-top-level-category',
+      items: [
+        {
+          type: 'doc',
+          id: 'concepts/trace',
+          label: 'Trace',
+        },
+        {
+          type: 'doc',
+          id: 'concepts/span',
+          label: 'Span',
+        },
+        {
+          type: 'doc',
+          id: 'concepts/feedback',
+          label: 'Feedback',
+        },
+        {
+          type: 'doc',
+          id: 'concepts/expectations',
+          label: 'Expectations',
+        },
+        {
+          type: 'doc',
+          id: 'concepts/scorers',
+          label: 'Scorers',
+        },
+        {
+          type: 'doc',
+          id: 'concepts/evaluation-datasets',
+          label: 'Evaluation Datasets',
+        },
+      ],
     },
   ],
 };

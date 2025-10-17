@@ -46,13 +46,9 @@ class EvalItem:
         """
         Create an EvalItem from a row of input Pandas Dataframe row.
         """
-        inputs = cls._parse_inputs(row.get(InputDatasetColumn.INPUTS))
+        if (inputs := row.get(InputDatasetColumn.INPUTS)) is not None:
+            inputs = cls._parse_inputs(inputs)
         outputs = row.get(InputDatasetColumn.OUTPUTS)
-
-        # Get the request ID from the row, or generate a new unique ID if not present.
-        request_id = row.get(InputDatasetColumn.REQUEST_ID)
-        if is_none_or_nan(request_id):
-            request_id = hashlib.sha256(str(inputs).encode()).hexdigest()
 
         # Extract trace column from the dataset.
         trace = row.get(InputDatasetColumn.TRACE)
@@ -66,6 +62,19 @@ class EvalItem:
 
         # Extract tags column from the dataset.
         tags = row.get(InputDatasetColumn.TAGS, {})
+
+        # Get the request ID from the row, or generate a new unique ID if not present.
+        request_id = row.get(InputDatasetColumn.REQUEST_ID)
+        if is_none_or_nan(request_id):
+            hashable_strings = [
+                str(x) for x in [inputs, outputs, trace, expectations] if x is not None
+            ]
+            # this should not happen, but added a check in case
+            if not hashable_strings:
+                raise MlflowException.invalid_parameter_value(
+                    "Dataset row must contain at least one non-None value"
+                )
+            request_id = hashlib.sha256(str(hashable_strings[0]).encode()).hexdigest()
 
         return cls(
             request_id=request_id,
@@ -100,7 +109,7 @@ class EvalItem:
             source_id = get_context().get_user_name()
             expectations.append(
                 Expectation(
-                    trace_id=self.trace.info.trace_id,
+                    trace_id=self.trace.info.trace_id if self.trace else None,
                     name=name,
                     source=AssessmentSource(
                         source_type=AssessmentSourceType.HUMAN,
@@ -116,7 +125,7 @@ class EvalItem:
             ResultDataFrameColumn.REQUEST_ID: self.request_id,
             ResultDataFrameColumn.INPUTS: self.inputs,
             ResultDataFrameColumn.OUTPUTS: self.outputs,
-            ResultDataFrameColumn.TRACE: self.trace.to_json(),
+            ResultDataFrameColumn.TRACE: self.trace.to_json() if self.trace else None,
             ResultDataFrameColumn.EXPECTATIONS: self.expectations,
             ResultDataFrameColumn.TAGS: self.tags,
             ResultDataFrameColumn.ERROR_MESSAGE: self.error_message,

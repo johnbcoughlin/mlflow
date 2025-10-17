@@ -12,6 +12,7 @@ from mlflow.entities.span import SpanType
 from mlflow.entities.trace import Trace
 from mlflow.exceptions import MlflowException
 from mlflow.genai import scorer
+from mlflow.genai.datasets import create_dataset
 from mlflow.genai.evaluation.utils import (
     _convert_scorer_to_legacy_metric,
     _convert_to_eval_set,
@@ -235,6 +236,20 @@ def test_convert_to_eval_set_has_no_errors(data_fixture, request):
     assert "expectations" in transformed_data.columns
 
 
+def test_convert_to_eval_set_without_request_and_response():
+    for _ in range(3):
+        with mlflow.start_span():
+            pass
+
+    trace_df = mlflow.search_traces()
+    trace_df = trace_df[["trace"]]
+    transformed_data = _convert_to_eval_set(trace_df)
+
+    assert "request" in transformed_data.columns
+    assert "response" in transformed_data.columns
+    assert transformed_data["request"].isna().all()
+
+
 def test_convert_to_legacy_eval_raise_for_invalid_json_columns(spark):
     # Data with invalid `inputs` column
     df = spark.createDataFrame(
@@ -261,6 +276,29 @@ def test_convert_to_legacy_eval_raise_for_invalid_json_columns(spark):
     )
     with pytest.raises(MlflowException, match="Failed to parse `expectations` column."):
         _convert_to_eval_set(df)
+
+
+def test_convert_to_eval_set_evaluation_dataset():
+    dataset = create_dataset("test")
+    dataset.merge_records(
+        [
+            {
+                "inputs": {"question": "What is Spark?"},
+                "outputs": "actual response for first question",
+                "expectations": {"expected_response": "expected response for first question"},
+            },
+            {
+                "inputs": {"question": "How can you minimize data shuffling in Spark?"},
+                "outputs": "actual response for second question",
+                "expectations": {"expected_response": "expected response for second question"},
+            },
+        ]
+    )
+    transformed_data = _convert_to_eval_set(dataset)
+
+    assert "request" in transformed_data.columns
+    assert "response" in transformed_data.columns
+    assert "expectations" in transformed_data.columns
 
 
 @pytest.mark.parametrize("data_fixture", _ALL_DATA_FIXTURES)
@@ -361,7 +399,7 @@ def test_input_is_optional_if_trace_is_provided(is_in_databricks):
 
 
 @pytest.mark.parametrize("input_type", ["list", "pandas"])
-def test_scorer_receives_correct_data_with_trace_data(input_type):
+def test_scorer_receives_correct_data_with_trace_data(input_type, monkeypatch: pytest.MonkeyPatch):
     sample_data = get_test_traces(type=input_type)
     received_args = []
 
@@ -371,11 +409,11 @@ def test_scorer_receives_correct_data_with_trace_data(input_type):
         return 0
 
     # Disable logging traces to MLflow to avoid calling mlflow APIs which need to be mocked
-    with patch.dict("os.environ", {"AGENT_EVAL_LOG_TRACES_TO_MLFLOW_ENABLED": "false"}):
-        mlflow.genai.evaluate(
-            data=sample_data,
-            scorers=[dummy_scorer],
-        )
+    monkeypatch.setenv("AGENT_EVAL_LOG_TRACES_TO_MLFLOW_ENABLED", "false")
+    mlflow.genai.evaluate(
+        data=sample_data,
+        scorers=[dummy_scorer],
+    )
 
     inputs, outputs, expectations, trace = received_args[0]
     assert inputs == {"question": "What is MLflow?"}

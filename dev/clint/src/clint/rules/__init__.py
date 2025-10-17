@@ -13,6 +13,7 @@ from clint.rules.implicit_optional import ImplicitOptional
 from clint.rules.incorrect_type_annotation import IncorrectTypeAnnotation
 from clint.rules.invalid_abstract_method import InvalidAbstractMethod
 from clint.rules.invalid_experimental_decorator import InvalidExperimentalDecorator
+from clint.rules.isinstance_union_syntax import IsinstanceUnionSyntax
 from clint.rules.lazy_builtin_import import LazyBuiltinImport
 from clint.rules.lazy_module import LazyModule
 from clint.rules.log_model_artifact_path import LogModelArtifactPath
@@ -20,13 +21,19 @@ from clint.rules.markdown_link import MarkdownLink
 from clint.rules.missing_docstring_param import MissingDocstringParam
 from clint.rules.missing_notebook_h1_header import MissingNotebookH1Header
 from clint.rules.mlflow_class_name import MlflowClassName
+from clint.rules.mock_patch_as_decorator import MockPatchAsDecorator
+from clint.rules.mock_patch_dict_environ import MockPatchDictEnviron
 from clint.rules.multi_assign import MultiAssign
+from clint.rules.nested_mock_patch import NestedMockPatch
 from clint.rules.no_class_based_tests import NoClassBasedTests
 from clint.rules.no_rst import NoRst
 from clint.rules.no_shebang import NoShebang
+from clint.rules.os_chdir_in_test import OsChdirInTest
 from clint.rules.os_environ_delete_in_test import OsEnvironDeleteInTest
 from clint.rules.os_environ_set_in_test import OsEnvironSetInTest
 from clint.rules.pytest_mark_repeat import PytestMarkRepeat
+from clint.rules.redundant_test_docstring import RedundantTestDocstring
+from clint.rules.temp_dir_in_test import TempDirInTest
 from clint.rules.test_name_typo import TestNameTypo
 from clint.rules.thread_pool_executor_without_thread_name_prefix import (
     ThreadPoolExecutorWithoutThreadNamePrefix,
@@ -56,6 +63,7 @@ __all__ = [
     "ForbiddenTraceUIInNotebook",
     "ImplicitOptional",
     "IncorrectTypeAnnotation",
+    "IsinstanceUnionSyntax",
     "InvalidAbstractMethod",
     "InvalidExperimentalDecorator",
     "LazyBuiltinImport",
@@ -65,12 +73,18 @@ __all__ = [
     "MissingDocstringParam",
     "MissingNotebookH1Header",
     "MlflowClassName",
+    "MockPatchDictEnviron",
+    "MockPatchAsDecorator",
+    "NestedMockPatch",
     "NoClassBasedTests",
     "NoRst",
     "NoShebang",
+    "OsChdirInTest",
     "OsEnvironDeleteInTest",
     "OsEnvironSetInTest",
     "PytestMarkRepeat",
+    "RedundantTestDocstring",
+    "TempDirInTest",
     "TestNameTypo",
     "ThreadPoolExecutorWithoutThreadNamePrefix",
     "TypingExtensions",
