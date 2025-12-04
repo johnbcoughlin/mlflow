@@ -203,6 +203,13 @@ MLFLOW_S3_IGNORE_TLS = _BooleanEnvironmentVariable("MLFLOW_S3_IGNORE_TLS", False
 #: (default: ``None``)
 MLFLOW_S3_UPLOAD_EXTRA_ARGS = _EnvironmentVariable("MLFLOW_S3_UPLOAD_EXTRA_ARGS", str, None)
 
+#: Specifies the expected AWS account ID that owns the S3 bucket for bucket ownership verification.
+#: When set, all S3 API calls will include the ExpectedBucketOwner parameter to prevent
+#: bucket takeover attacks. This helps protect against scenarios where a bucket is deleted
+#: and recreated by a different AWS account with the same name.
+#: (default: ``None``)
+MLFLOW_S3_EXPECTED_BUCKET_OWNER = _EnvironmentVariable("MLFLOW_S3_EXPECTED_BUCKET_OWNER", str, None)
+
 #: Specifies the location of a Kerberos ticket cache to use for HDFS artifact operations.
 #: (default: ``None``)
 MLFLOW_KERBEROS_TICKET_CACHE = _EnvironmentVariable("MLFLOW_KERBEROS_TICKET_CACHE", str, None)
@@ -637,6 +644,21 @@ MLFLOW_TRACE_BUFFER_MAX_SIZE = _EnvironmentVariable("MLFLOW_TRACE_BUFFER_MAX_SIZ
 #: (default: ``128``)
 MLFLOW_PROMPT_CACHE_MAX_SIZE = _EnvironmentVariable("MLFLOW_PROMPT_CACHE_MAX_SIZE", int, 128)
 
+#: Time-to-live in seconds for cached Alias-based prompts, e.g., "prompts:/name@latest", in the
+#: prompt cache. After this time, cached prompts will be considered stale and refreshed on next
+#: access. Set to 0 to disable caching entirely. (default: ``60``)
+MLFLOW_ALIAS_PROMPT_CACHE_TTL_SECONDS = _EnvironmentVariable(
+    "MLFLOW_ALIAS_PROMPT_CACHE_TTL_SECONDS", float, 60
+)
+
+#: Time-to-live in seconds for cached version-based prompts, e.g., "prompts:/name/version", in the
+#: prompt cache. After this time, cached prompts will be considered stale and refreshed on next
+#: access. Set to 0 to disable caching entirely. (default: ``float("inf")``, infinite TTL)
+MLFLOW_VERSION_PROMPT_CACHE_TTL_SECONDS = _EnvironmentVariable(
+    "MLFLOW_VERSION_PROMPT_CACHE_TTL_SECONDS", float, float("inf")
+)
+
+
 #: Private configuration option.
 #: Enables the ability to catch exceptions within MLflow evaluate for classification models
 #: where a class imbalance due to a missing target class would raise an error in the
@@ -660,6 +682,12 @@ MLFLOW_GENAI_EVAL_MAX_WORKERS = _EnvironmentVariable("MLFLOW_GENAI_EVAL_MAX_WORK
 #: to skip the validation and save the time of running a single prediction.
 MLFLOW_GENAI_EVAL_SKIP_TRACE_VALIDATION = _BooleanEnvironmentVariable(
     "MLFLOW_GENAI_EVAL_SKIP_TRACE_VALIDATION", False
+)
+
+#: Enable tracing for evaluation scorers. By default (False), MLflow will not trace the scorer
+#: function calls. To trace the scorer functions for debugging purpose, set this to True.
+MLFLOW_GENAI_EVAL_ENABLE_SCORER_TRACING = _BooleanEnvironmentVariable(
+    "MLFLOW_GENAI_EVAL_ENABLE_SCORER_TRACING", False
 )
 
 #: Whether to warn (default) or raise (opt-in) for unresolvable requirements inference for
@@ -695,6 +723,13 @@ MLFLOW_TRACE_ENABLE_OTLP_DUAL_EXPORT = _BooleanEnvironmentVariable(
 #: (default: ``True``)
 MLFLOW_ENABLE_OTLP_EXPORTER = _BooleanEnvironmentVariable("MLFLOW_ENABLE_OTLP_EXPORTER", True)
 
+#: By default, MLflow uses an isolated TracerProvider instance to generate traces, instead of the
+#: OpenTelemetry's singleton TracerProvider. Set this to False to let MLflow share the same OTel
+# TracerProvider and allow mixing MLflow SDK and Otel SDK to generate a single trace.
+#: (default: ``True``)
+MLFLOW_USE_DEFAULT_TRACER_PROVIDER = _BooleanEnvironmentVariable(
+    "MLFLOW_USE_DEFAULT_TRACER_PROVIDER", True
+)
 
 # Default addressing style to use for boto client
 MLFLOW_BOTO_CLIENT_ADDRESSING_STYLE = _EnvironmentVariable(
@@ -951,6 +986,10 @@ _MLFLOW_SEARCH_TRACES_MAX_BATCH_SIZE = _EnvironmentVariable(
     "MLFLOW_SEARCH_TRACES_MAX_BATCH_SIZE", int, 10
 )
 
+_MLFLOW_DELETE_TRACES_MAX_BATCH_SIZE = _EnvironmentVariable(
+    "MLFLOW_DELETE_TRACES_MAX_BATCH_SIZE", int, 100
+)
+
 #: Specifies the logging level for MLflow. This can be set to any valid logging level
 #: (e.g., "DEBUG", "INFO"). This environment must be set before importing mlflow to take
 #: effect. To modify the logging level after importing mlflow, use `importlib.reload(mlflow)`.
@@ -1099,3 +1138,19 @@ MLFLOW_SERVER_JOB_TRANSIENT_ERROR_RETRY_MAX_DELAY = _EnvironmentVariable(
 #: issues with the judge's reasoning.
 #: (default: ``30``)
 MLFLOW_JUDGE_MAX_ITERATIONS = _EnvironmentVariable("MLFLOW_JUDGE_MAX_ITERATIONS", int, 30)
+
+
+#: Enable automatic run resumption for Serverless GPU Compute (SGC) jobs on Databricks.
+#: When enabled, MLflow will check for the SERVERLESS_GPU_COMPUTE_ASSOCIATED_JOB_RUN_ID job
+#: parameter and automatically resume MLflow runs associated with that Databricks job run ID.
+#: (default: ``True``)
+_MLFLOW_ENABLE_SGC_RUN_RESUMPTION_FOR_DATABRICKS_JOBS = _BooleanEnvironmentVariable(
+    "MLFLOW_ENABLE_SGC_RUN_RESUMPTION_FOR_DATABRICKS_JOBS", True
+)
+
+#: Serverless GPU Compute (SGC) job run ID for automatic run resumption on Databricks.
+#: This is used as a fallback when the dbutils widget parameter is not available.
+#: (default: ``None``)
+_SERVERLESS_GPU_COMPUTE_ASSOCIATED_JOB_RUN_ID = _EnvironmentVariable(
+    "SERVERLESS_GPU_COMPUTE_ASSOCIATED_JOB_RUN_ID", str, None
+)

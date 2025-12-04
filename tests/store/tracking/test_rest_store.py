@@ -30,6 +30,7 @@ from mlflow.entities.assessment import (
 )
 from mlflow.entities.assessment_error import AssessmentError
 from mlflow.entities.assessment_source import AssessmentSource, AssessmentSourceType
+from mlflow.entities.model_registry import PromptVersion
 from mlflow.entities.span import LiveSpan
 from mlflow.entities.trace import Trace
 from mlflow.entities.trace_data import TraceData
@@ -43,10 +44,11 @@ from mlflow.environment_variables import (
     _MLFLOW_LOG_LOGGED_MODEL_PARAMS_BATCH_SIZE,
     MLFLOW_ASYNC_TRACE_LOGGING_RETRY_TIMEOUT,
 )
-from mlflow.exceptions import MlflowException
+from mlflow.exceptions import MlflowException, MlflowNotImplementedException
 from mlflow.models import Model
 from mlflow.protos.databricks_pb2 import RESOURCE_DOES_NOT_EXIST
 from mlflow.protos.service_pb2 import (
+    AddDatasetToExperiments,
     CalculateTraceFilterCorrelation,
     CreateAssessment,
     CreateDataset,
@@ -66,7 +68,9 @@ from mlflow.protos.service_pb2 import (
     GetExperimentByName,
     GetLoggedModel,
     GetScorer,
+    GetTrace,
     GetTraceInfoV3,
+    LinkPromptsToTrace,
     ListScorers,
     ListScorerVersions,
     LogBatch,
@@ -76,6 +80,7 @@ from mlflow.protos.service_pb2 import (
     LogModel,
     LogParam,
     RegisterScorer,
+    RemoveDatasetFromExperiments,
     RestoreExperiment,
     RestoreRun,
     SearchEvaluationDatasets,
@@ -748,7 +753,6 @@ def test_deprecated_end_trace_v2():
 
 
 def test_search_traces():
-    """Test the search_traces method with default behavior using SearchTracesV3Request."""
     creds = MlflowHostCreds("https://hello")
     store = RestStore(lambda: creds)
     response = mock.MagicMock()
@@ -840,7 +844,6 @@ def test_search_traces_errors():
 
 
 def test_get_artifact_uri_for_trace_compatibility():
-    """Test that get_artifact_uri_for_trace works with both TraceInfo and TraceInfoV3 objects."""
     from mlflow.tracing.utils.artifact_utils import get_artifact_uri_for_trace
 
     # Create a TraceInfo (v2) object
@@ -906,6 +909,35 @@ def test_delete_traces(delete_traces_kwargs):
         res = store.delete_traces(**delete_traces_kwargs)
         _verify_requests(mock_http, creds, "traces/delete-traces", "POST", message_to_json(request))
         assert res == 1
+
+
+def test_delete_traces_with_batching():
+    from mlflow.environment_variables import _MLFLOW_DELETE_TRACES_MAX_BATCH_SIZE
+
+    creds = MlflowHostCreds("https://hello")
+    store = RestStore(lambda: creds)
+    response = mock.MagicMock()
+    response.status_code = 200
+
+    # Create 250 trace IDs to test batching (should create 3 batches: 100, 100, 50)
+    num_traces = 250
+    trace_ids = [f"tr-{i}" for i in range(num_traces)]
+
+    # Each batch returns some number of deleted traces
+    response.text = json.dumps({"traces_deleted": 100})
+
+    batch_size = _MLFLOW_DELETE_TRACES_MAX_BATCH_SIZE.get()
+
+    with mock.patch("mlflow.utils.rest_utils.http_request", return_value=response) as mock_http:
+        store.delete_traces(experiment_id="0", trace_ids=trace_ids)
+
+        # Verify that we made 3 API calls (250 / 100 = 3 batches)
+        expected_num_calls = math.ceil(num_traces / batch_size)
+        assert mock_http.call_count == expected_num_calls
+
+        # Verify that batch sizes are [100, 100, 50]
+        batch_sizes = [len(call[1]["json"]["request_ids"]) for call in mock_http.call_args_list]
+        assert batch_sizes == [100, 100, 50]
 
 
 def test_set_trace_tag():
@@ -1272,6 +1304,90 @@ def test_get_trace_info():
         assert result.assessments[1].name == "feedback_error"
         assert result.assessments[2].name == "expectation"
         assert result.assessments[3].name == "complex_expectation"
+
+
+def test_get_trace():
+    # Generate a sample trace with spans
+    with mlflow.start_span(name="root_span") as span:
+        span.set_inputs({"input": "value"})
+        span.set_outputs({"output": "value"})
+        with mlflow.start_span(name="child_span") as child:
+            child.set_inputs({"child_input": "child_value"})
+
+    trace = mlflow.get_trace(span.trace_id)
+    trace_proto = trace.to_proto()
+    mock_response = GetTrace.Response(trace=trace_proto)
+
+    store = RestStore(lambda: MlflowHostCreds("https://hello"))
+
+    with mock.patch.object(store, "_call_endpoint", return_value=mock_response) as mock_call:
+        result = store.get_trace(span.trace_id, allow_partial=True)
+
+        # Verify we get the expected object back
+        assert isinstance(result, Trace)
+        assert result.info.trace_id == span.trace_id
+        assert len(result.data.spans) == 2
+
+        # Verify the endpoint was called with correct parameters
+        mock_call.assert_called_once()
+        call_args = mock_call.call_args
+        assert call_args[0][0] == GetTrace
+        # Check the request body contains the trace_id and allow_partial
+        request_body_json = json.loads(call_args[0][1])
+        assert request_body_json["trace_id"] == span.trace_id
+        assert request_body_json["allow_partial"] is True
+
+
+def test_get_trace_with_allow_partial_false():
+    # Generate a sample trace
+    with mlflow.start_span(name="test_span") as span:
+        span.set_inputs({"input": "value"})
+
+    trace = mlflow.get_trace(span.trace_id)
+    trace_proto = trace.to_proto()
+    mock_response = GetTrace.Response(trace=trace_proto)
+
+    store = RestStore(lambda: MlflowHostCreds("https://hello"))
+
+    with mock.patch.object(store, "_call_endpoint", return_value=mock_response) as mock_call:
+        result = store.get_trace(span.trace_id, allow_partial=False)
+
+        # Verify we get the expected object back
+        assert isinstance(result, Trace)
+        assert result.info.trace_id == span.trace_id
+
+        # Verify the endpoint was called with allow_partial=False
+        call_args = mock_call.call_args
+        request_body_json = json.loads(call_args[0][1])
+        assert request_body_json["allow_partial"] is False
+
+
+def test_get_trace_handles_old_server_routing_conflict():
+    store = RestStore(lambda: MlflowHostCreds("https://hello"))
+
+    # Simulate old server returning "Trace with ID 'get' not found"
+    error_response = MlflowException(
+        "Trace with ID 'get' not found",
+        error_code=RESOURCE_DOES_NOT_EXIST,
+    )
+
+    with mock.patch.object(store, "_call_endpoint", side_effect=error_response):
+        with pytest.raises(MlflowNotImplementedException):  # noqa: PT011
+            store.get_trace("some-trace-id")
+
+
+def test_get_trace_raises_other_errors():
+    store = RestStore(lambda: MlflowHostCreds("https://hello"))
+
+    error_message = "Trace with ID 'abc123' not found"
+    genuine_error = MlflowException(
+        error_message,
+        error_code=RESOURCE_DOES_NOT_EXIST,
+    )
+
+    with mock.patch.object(store, "_call_endpoint", side_effect=genuine_error):
+        with pytest.raises(MlflowException, match=error_message):
+            store.get_trace("abc123")
 
 
 def test_log_logged_model_params():
@@ -1856,7 +1972,7 @@ def test_evaluation_dataset_merge_records():
         last_update_time=1234567890,
     )
 
-    with mock.patch("mlflow.entities.evaluation_dataset._get_store") as mock_get_store:
+    with mock.patch("mlflow.tracking._tracking_service.utils._get_store") as mock_get_store:
         mock_get_store.return_value = store
 
         with mock.patch.object(store, "get_dataset") as mock_get:
@@ -1971,7 +2087,7 @@ def test_evaluation_dataset_lazy_loading_records():
         last_update_time=1234567890,
     )
 
-    with mock.patch("mlflow.entities.evaluation_dataset._get_store") as mock_get_store:
+    with mock.patch("mlflow.tracking._tracking_service.utils._get_store") as mock_get_store:
         mock_get_store.return_value = store
 
         with mock.patch.object(store, "_load_dataset_records") as mock_load:
@@ -2299,8 +2415,82 @@ def test_evaluation_dataset_user_tracking_search():
         assert request_json["filter_string"] == "last_updated_by = 'user2'"
 
 
+def test_add_dataset_to_experiments():
+    creds = MlflowHostCreds("https://test-server")
+    store = RestStore(lambda: creds)
+
+    with mock.patch.object(store, "_call_endpoint") as mock_call:
+        response = AddDatasetToExperiments.Response()
+        response.dataset.dataset_id = "d-1234567890abcdef1234567890abcdef"
+        response.dataset.name = "test_dataset"
+        response.dataset.experiment_ids.extend(["0", "1", "3", "4"])
+        response.dataset.created_time = 1234567890
+        response.dataset.last_update_time = 1234567890
+        response.dataset.digest = "abc123"
+
+        mock_call.side_effect = [response]
+
+        result = store.add_dataset_to_experiments(
+            dataset_id="d-1234567890abcdef1234567890abcdef",
+            experiment_ids=["3", "4"],
+        )
+
+        assert mock_call.call_count == 1
+        assert result.dataset_id == "d-1234567890abcdef1234567890abcdef"
+        assert "3" in result.experiment_ids
+        assert "4" in result.experiment_ids
+        assert "0" in result.experiment_ids
+        assert "1" in result.experiment_ids
+
+        req = AddDatasetToExperiments(
+            dataset_id="d-1234567890abcdef1234567890abcdef",
+            experiment_ids=["3", "4"],
+        )
+        mock_call.assert_called_once_with(
+            AddDatasetToExperiments,
+            message_to_json(req),
+            endpoint="/api/3.0/mlflow/datasets/d-1234567890abcdef1234567890abcdef/add-experiments",
+        )
+
+
+def test_remove_dataset_from_experiments():
+    creds = MlflowHostCreds("https://test-server")
+    store = RestStore(lambda: creds)
+
+    with mock.patch.object(store, "_call_endpoint") as mock_call:
+        response = RemoveDatasetFromExperiments.Response()
+        response.dataset.dataset_id = "d-1234567890abcdef1234567890abcdef"
+        response.dataset.name = "test_dataset"
+        response.dataset.experiment_ids.extend(["0", "1"])
+        response.dataset.created_time = 1234567890
+        response.dataset.last_update_time = 1234567890
+        response.dataset.digest = "abc123"
+
+        mock_call.side_effect = [response]
+
+        result = store.remove_dataset_from_experiments(
+            dataset_id="d-1234567890abcdef1234567890abcdef",
+            experiment_ids=["3"],
+        )
+
+        assert mock_call.call_count == 1
+        assert result.dataset_id == "d-1234567890abcdef1234567890abcdef"
+        assert "3" not in result.experiment_ids
+        assert "0" in result.experiment_ids
+        assert "1" in result.experiment_ids
+
+        req = RemoveDatasetFromExperiments(
+            dataset_id="d-1234567890abcdef1234567890abcdef",
+            experiment_ids=["3"],
+        )
+        mock_call.assert_called_once_with(
+            RemoveDatasetFromExperiments,
+            message_to_json(req),
+            endpoint="/api/3.0/mlflow/datasets/d-1234567890abcdef1234567890abcdef/remove-experiments",
+        )
+
+
 def test_register_scorer():
-    """Test register_scorer method."""
     store = RestStore(lambda: None)
 
     with mock.patch.object(store, "_call_endpoint") as mock_call_endpoint:
@@ -2338,7 +2528,6 @@ def test_register_scorer():
 
 
 def test_list_scorers():
-    """Test list_scorers method."""
     store = RestStore(lambda: None)
 
     with mock.patch.object(store, "_call_endpoint") as mock_call_endpoint:
@@ -2382,7 +2571,6 @@ def test_list_scorers():
 
 
 def test_list_scorer_versions():
-    """Test list_scorer_versions method."""
     store = RestStore(lambda: None)
 
     with mock.patch.object(store, "_call_endpoint") as mock_call_endpoint:
@@ -2425,7 +2613,6 @@ def test_list_scorer_versions():
 
 
 def test_get_scorer_with_version():
-    """Test get_scorer method with specific version."""
     store = RestStore(lambda: None)
 
     with mock.patch.object(store, "_call_endpoint") as mock_call_endpoint:
@@ -2461,7 +2648,6 @@ def test_get_scorer_with_version():
 
 
 def test_get_scorer_without_version():
-    """Test get_scorer method without version (should return latest)."""
     store = RestStore(lambda: None)
 
     with mock.patch.object(store, "_call_endpoint") as mock_call_endpoint:
@@ -2496,7 +2682,6 @@ def test_get_scorer_without_version():
 
 
 def test_delete_scorer_with_version():
-    """Test delete_scorer method with specific version."""
     store = RestStore(lambda: None)
 
     with mock.patch.object(store, "_call_endpoint") as mock_call_endpoint:
@@ -2520,7 +2705,6 @@ def test_delete_scorer_with_version():
 
 
 def test_delete_scorer_without_version():
-    """Test delete_scorer method without version (should delete all versions)."""
     store = RestStore(lambda: None)
 
     with mock.patch.object(store, "_call_endpoint") as mock_call_endpoint:
@@ -2652,7 +2836,6 @@ def _create_test_spans() -> list[LiveSpan]:
 
 
 def test_log_spans_with_version_check():
-    """Test that log_spans raises NotImplementedError for old server versions."""
     spans = _create_test_spans()
     experiment_id = "exp-123"
 
@@ -2719,7 +2902,6 @@ def test_log_spans_with_version_check():
 
 
 def test_server_version_check_caching():
-    """Test that server version is cached and not fetched multiple times."""
     spans = _create_test_spans()
     experiment_id = "exp-123"
 
@@ -2789,4 +2971,36 @@ def test_server_version_check_caching():
             method="POST",
             data=mock.ANY,
             extra_headers=mock.ANY,
+        )
+
+
+def test_link_prompts_to_trace():
+    creds = MlflowHostCreds("https://hello")
+    store = RestStore(lambda: creds)
+    response = mock.MagicMock()
+    response.status_code = 200
+    response.text = "{}"
+
+    trace_id = "tr-1234"
+    prompt_versions = [
+        PromptVersion(name="prompt1", version=1, template="template1"),
+        PromptVersion(name="prompt2", version=2, template="template2"),
+    ]
+
+    request = LinkPromptsToTrace(
+        trace_id=trace_id,
+        prompt_versions=[
+            LinkPromptsToTrace.PromptVersionRef(name=pv.name, version=str(pv.version))
+            for pv in prompt_versions
+        ],
+    )
+
+    with mock.patch("mlflow.utils.rest_utils.http_request", return_value=response) as mock_http:
+        store.link_prompts_to_trace(trace_id=trace_id, prompt_versions=prompt_versions)
+        _verify_requests(
+            mock_http,
+            creds,
+            "traces/link-prompts",
+            "POST",
+            message_to_json(request),
         )

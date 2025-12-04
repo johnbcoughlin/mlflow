@@ -420,9 +420,7 @@ def _validate_function_parameters(function: Callable[..., Any], params: dict[str
     ]
 
     # Check for missing required parameters
-    missing_params = [param for param in required_params if param not in params]
-
-    if missing_params:
+    if missing_params := [param for param in required_params if param not in params]:
         raise MlflowException.invalid_parameter_value(
             f"Missing required parameters for function '{function.__name__}': {missing_params}. "
             f"Expected parameters: {list(sig.parameters.keys())}"
@@ -435,13 +433,6 @@ def _check_requirements(backend_store_uri: str | None = None) -> None:
 
     if os.name == "nt":
         raise MlflowException("MLflow job backend does not support Windows system.")
-
-    try:
-        import huey  # noqa: F401
-    except ImportError:
-        raise MlflowException(
-            "MLflow job backend requires 'huey<3,>=2.5.0' package but it is not installed"
-        )
 
     if shutil.which("uv") is None:
         raise MlflowException("MLflow job backend requires 'uv' but it is not installed.")

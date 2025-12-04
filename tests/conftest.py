@@ -308,7 +308,6 @@ def pytest_ignore_collect(collection_path, config):
             "tests/bedrock",
             "tests/catboost",
             "tests/crewai",
-            "tests/diviner",
             "tests/dspy",
             "tests/gemini",
             "tests/groq",
@@ -327,7 +326,6 @@ def pytest_ignore_collect(collection_path, config):
             "tests/openai",
             "tests/paddle",
             "tests/pmdarima",
-            "tests/promptflow",
             "tests/prophet",
             "tests/pydantic_ai",
             "tests/pyfunc",
@@ -409,8 +407,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
         )
 
     # If there are failed tests, display a command to run them
-    failed_test_reports = terminalreporter.stats.get("failed", [])
-    if failed_test_reports:
+    if failed_test_reports := terminalreporter.stats.get("failed", []):
         if len(failed_test_reports) <= 30:
             ids = [repr(report.nodeid) for report in failed_test_reports]
         else:
@@ -592,6 +589,10 @@ def reset_tracing():
     InMemoryTraceManager.reset()
     IPythonTraceDisplayHandler._instance = None
 
+    # Reset opentelemetry tracer provider as well
+    trace_api._TRACER_PROVIDER_SET_ONCE._done = False
+    trace_api._TRACER_PROVIDER = None
+
 
 def _is_span_active():
     span = trace_api.get_current_span()
@@ -697,7 +698,7 @@ def clean_up_mlruns_directory(request):
             if is_windows():
                 raise
             # `shutil.rmtree` can't remove files owned by root in a docker container.
-            subprocess.run(["sudo", "rm", "-rf", mlruns_dir], check=True)
+            subprocess.check_call(["sudo", "rm", "-rf", mlruns_dir])
 
 
 @pytest.fixture(autouse=not IS_TRACING_SDK_ONLY)
@@ -779,7 +780,7 @@ def serve_wheel(request, tmp_path_factory):
         # In this case, assume we're in the root of the repo.
         repo_root = "."
 
-    subprocess.run(
+    subprocess.check_call(
         [
             sys.executable,
             "-m",
@@ -790,7 +791,6 @@ def serve_wheel(request, tmp_path_factory):
             "--no-deps",
             repo_root,
         ],
-        check=True,
     )
     with subprocess.Popen(
         [
@@ -861,6 +861,28 @@ def reset_active_model_context():
 @pytest.fixture(autouse=True)
 def clean_up_telemetry_threads():
     yield
-    client = get_telemetry_client()
-    if client:
+    if client := get_telemetry_client():
         client._clean_up()
+
+
+@pytest.fixture(scope="session")
+def cached_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """
+    Creates and caches a SQLite database to avoid repeated migrations for each test run.
+
+    This is a session-scoped fixture that creates the database once per test session.
+    Individual tests should copy this database to their own tmp_path to avoid conflicts.
+    """
+    tmp_dir = tmp_path_factory.mktemp("sqlite_db")
+    db_path = tmp_dir / "mlflow.db"
+
+    if IS_TRACING_SDK_ONLY:
+        return db_path
+
+    from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
+
+    db_uri = f"sqlite:///{db_path}"
+    artifact_uri = (tmp_dir / "artifacts").as_uri()
+    store = SqlAlchemyStore(db_uri, artifact_uri)
+    store.engine.dispose()
+    return db_path

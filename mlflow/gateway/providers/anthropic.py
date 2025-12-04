@@ -46,8 +46,7 @@ class AnthropicAdapter(ProviderAdapter):
 
         # Cohere uses `system` to set the system message
         # we concatenate all system messages from the user with a newline
-        system_messages = [m for m in payload["messages"] if m["role"] == "system"]
-        if system_messages:
+        if system_messages := [m for m in payload["messages"] if m["role"] == "system"]:
             payload["system"] = "\n".join(m["content"] for m in system_messages)
 
         # remaining messages are chat history
@@ -174,7 +173,7 @@ class AnthropicAdapter(ProviderAdapter):
                     # TODO: Remove this casting once
                     # https://github.com/mlflow/mlflow/pull/14160 is merged
                     message=chat.ResponseMessage(
-                        **convert_message_to_mlflow_chat(resp).model_dump_compat()
+                        **convert_message_to_mlflow_chat(resp).model_dump()
                     ),
                     finish_reason=stop_reason,
                 )
